@@ -16,8 +16,8 @@
 
 # Locale.
 
-fa_IR:
-  activerecord:
+en:
+activerecord:
     attributes:
       user:
         accepted_terms: "شرایط و قوانین"
