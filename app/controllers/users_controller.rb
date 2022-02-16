@@ -45,6 +45,9 @@ class UsersController < ApplicationController
 
     logger.info "Support: #{@user.email} user has been created."
 
+    # Mark password as secure
+    @user.update(secure_password: true)
+
     # Set user to pending and redirect if Approval Registration is set
     if approval_registration
       @user.set_role :pending
@@ -97,13 +100,16 @@ class UsersController < ApplicationController
       params[:user][:name] = @user.name
       params[:user][:email] = @user.email
     end
-    old_user_email = @user.email
-    if @user.without_terms_acceptance { @user.update_attributes(user_params) }
-      @user.without_terms_acceptance {
-        @user.update_attributes(email_verified: false) if user_params[:email] != old_user_email
-        user_locale(@user)
-      }
-      if @user.without_terms_acceptance { update_roles(params[:user][:role_id]) }
+
+    if @user.update_attributes(user_params)
+      @user.update_attributes(email_verified: false) if user_params[:email] != @user.email
+
+      # Mark password as secure
+      @user.update(secure_password: true)
+
+      user_locale(@user)
+
+      if update_roles(params[:user][:role_id])
         return redirect_to redirect_path, flash: { success: I18n.t("info_update_success") }
       else
         flash[:alert] = I18n.t("administrator.roles.invalid_assignment")
@@ -116,18 +122,23 @@ class UsersController < ApplicationController
   # POST /u/:user_uid/change_password
   def update_password
     # Update the users password.
-    if @user.authenticate(user_params[:old_password])
-      # Bad UX on client side [FIXED].
-      @user.assign_attributes user_params.slice(:password, :password_confirmation)
+    if @user.authenticate(user_params[:password])
+      # Verify that the new passwords match.
+      if user_params[:new_password] == user_params[:password_confirmation]
+        @user.password = user_params[:new_password]
+      else
+        # New passwords don't match.
+        @user.errors.add(:password_confirmation, "doesn't match")
+      end
     else
       # Original password is incorrect, can't update.
-      @user.errors.add(:old_password, I18n.t("old_password_incorrect"))
+      @user.errors.add(:password, "is incorrect")
     end
 
     # Notify the user that their account has been updated.
-    if @user.errors.empty? && @user.without_terms_acceptance { @user.save }
-      return redirect_to change_password_path, flash: { success: I18n.t("info_update_success") }
-    end
+    return redirect_to change_password_path,
+      flash: { success: I18n.t("info_update_success") } if @user.errors.empty? && @user.save
+
     # redirect_to change_password_path
     render :change_password
   end
@@ -230,7 +241,7 @@ class UsersController < ApplicationController
 
   def user_params
     params.require(:user).permit(:name, :email, :image, :password, :password_confirmation,
-      :old_password, :provider, :accepted_terms, :language)
+      :new_password, :provider, :accepted_terms, :language)
   end
 
   def send_registration_email

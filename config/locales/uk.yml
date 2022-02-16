@@ -28,14 +28,8 @@ uk:
     errors:
       models:
         user:
-          confirmation: не співпадає
-          attributes:
-            email:
-              invalid: невірний формат email
-            password:
-              invalid: не відповідає вимогам складності 
-              
-  
+          password: не відповідає вимогам складності
+          confirmation: не збігається з паролем
   administrator:
     site_settings:
       authentication:

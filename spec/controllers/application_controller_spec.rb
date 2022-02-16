@@ -82,9 +82,9 @@ describe ApplicationController do
 
   context "setters" do
     it "sets the user locale correctly" do
-      user = create(:user, language: "ru")
+      user = create(:user, language: "fa_IR")
 
-      expect(controller.user_locale(user)).to eql("ru")
+      expect(controller.user_locale(user)).to eql("fa_IR")
     end
 
     it "defaults to English locale if invalid language is set" do

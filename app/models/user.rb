@@ -21,7 +21,6 @@ require 'bbb_api'
 class User < ApplicationRecord
   include Deleteable
 
-  PASSWORD_PATTERN = /\A(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*(\W|_)).{8,}\z/
   after_create :setup_user
 
   before_save { email.try(:downcase!) }
@@ -46,14 +45,13 @@ class User < ApplicationRecord
                     format: { with: /\A[\w+\-'.]+@[a-z\d\-.]+\.[a-z]+\z/i }
 
   validates :password, length: { minimum: 8 },
-            format: PASSWORD_PATTERN,
+            format: /\A(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{8,}\z/,
             confirmation: true,
             if: :validate_password?
 
   # Bypass validations if omniauth
   validates :accepted_terms, acceptance: true,
-                             if: -> { greenlight_account? && Rails.configuration.terms },
-                             unless: -> { @bypass_terms_acceptance }
+                             unless: -> { !greenlight_account? || !Rails.configuration.terms }
 
   # We don't want to require password validations on all accounts.
   has_secure_password(validations: false)
@@ -116,10 +114,6 @@ class User < ApplicationRecord
       search_param = "%#{sanitize_sql_like(string)}%"
       where(search_query, search: search_param)
     end
-
-    def secure_password?(pwd)
-      pwd.match? PASSWORD_PATTERN
-    end
   end
 
   # Returns a list of rooms ordered by last session (with nil rooms last)
@@ -132,9 +126,7 @@ class User < ApplicationRecord
   # Activates an account and initialize a users main room
   def activate
     set_role :user if role_id.nil?
-    without_terms_acceptance {
-      update_attributes(email_verified: true, activated_at: Time.zone.now, activation_digest: nil)
-    }
+    update_attributes(email_verified: true, activated_at: Time.zone.now, activation_digest: nil)
   end
 
   def activated?
@@ -148,15 +140,13 @@ class User < ApplicationRecord
   # Sets the password reset attributes.
   def create_reset_digest
     new_token = SecureRandom.urlsafe_base64
-    without_terms_acceptance {
-      update_attributes(reset_digest: User.hash_token(new_token), reset_sent_at: Time.zone.now)
-    }
+    update_attributes(reset_digest: User.hash_token(new_token), reset_sent_at: Time.zone.now)
     new_token
   end
 
   def create_activation_token
     new_token = SecureRandom.urlsafe_base64
-    without_terms_acceptance { update_attributes(activation_digest: User.hash_token(new_token)) }
+    update_attributes(activation_digest: User.hash_token(new_token))
     new_token
   end
 
@@ -240,13 +230,6 @@ class User < ApplicationRecord
     update(failed_attempts: 0) if attempts.positive? && !within_1_day
 
     false
-  end
-
-  def without_terms_acceptance
-    @bypass_terms_acceptance = true
-    block_res = yield
-    @bypass_terms_acceptance = false
-    block_res
   end
 
   private
